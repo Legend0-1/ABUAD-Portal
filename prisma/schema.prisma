@@ -1,0 +1,666 @@
+// ABUAD Part-Time Course Registration Portal - Prisma Schema
+// Production-grade normalized relational schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ===================== AUTH & USERS =====================
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  middleName        String?
+  phone             String?
+  avatarUrl         String?
+  role              UserRole @default(STUDENT)
+  status            UserStatus @default(ACTIVE)
+  isEmailVerified   Boolean  @default(false)
+  emailVerifyToken  String?
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  twoFactorEnabled  Boolean  @default(false)
+  twoFactorSecret   String?
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  lastLoginDevice   String?
+  failedLoginCount  Int      @default(0)
+  lockedUntil       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  student           Student?
+  approvals         Approval[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+  sessions          UserSession[]
+  supportTickets    SupportTicket[]   @relation("TicketRequester")
+  ticketReplies     SupportTicket[]   @relation("TicketResponder")
+  announcements     Announcement[]
+  adviserNotes      AdviserNote[]
+
+  @@index([role, status])
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ICT_ADMIN
+  REGISTRY
+  COLLEGE_OFFICER
+  DEPARTMENT_COORDINATOR
+  ACADEMIC_ADVISER
+  BURSARY
+  STUDENT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+  PENDING
+}
+
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  refreshToken String   @unique
+  deviceInfo   String?
+  ipAddress    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  revokedAt    DateTime?
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ===================== ACADEMIC STRUCTURE =====================
+
+model College {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  dean        String?
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  departments Department[]
+  courses     Course[]
+  students    Student[]
+  officers    CollegeOfficer[]
+
+  @@index([code])
+}
+
+model Department {
+  id           String   @id @default(cuid())
+  code         String
+  name         String
+  collegeId    String
+  hod          String?
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  college      College  @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  courses      Course[]
+  students     Student[]
+  advisers     AcademicAdviser[]
+  coordinators DepartmentCoordinator[]
+
+  @@unique([code, collegeId])
+  @@index([collegeId])
+}
+
+model Programme {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  students    Student[]
+}
+
+model AcademicSession {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g. 2025/2026
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(false)
+  isArchived  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  semesters     Semester[]
+  registrations Registration[]
+  courses       CourseOffering[]
+  students      Student[]
+}
+
+model Semester {
+  id          String   @id @default(cuid())
+  name        SemesterName
+  sessionId   String
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean  @default(false)
+  registrationDeadline DateTime?
+
+  session     AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  courses     CourseOffering[]
+  registrations Registration[]
+  students      Student[]
+
+  @@unique([name, sessionId])
+}
+
+enum SemesterName {
+  FIRST
+  SECOND
+  SUMMER
+}
+
+// ===================== COURSES =====================
+
+model Course {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  title           String
+  description     String?
+  creditUnits     Int
+  level           AcademicLevel
+  courseType      CourseType
+  departmentId    String
+  collegeId       String
+  semester        SemesterName
+  lecturer        String?
+  venue           String?
+  status          CourseStatus @default(ACTIVE)
+  maxStudents     Int      @default(100)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  department      Department @relation(fields: [departmentId], references: [id])
+  college         College    @relation(fields: [collegeId], references: [id])
+  offerings       CourseOffering[]
+  registrations   RegistrationDetail[]
+  results         Result[]
+  prerequisites   CoursePrerequisite[] @relation("Course")
+  requiredFor     CoursePrerequisite[] @relation("Prerequisite")
+
+  @@index([departmentId, level])
+  @@index([collegeId])
+}
+
+enum AcademicLevel {
+  LEVEL_100
+  LEVEL_200
+  LEVEL_300
+  LEVEL_400
+  LEVEL_500
+  POSTGRADUATE
+}
+
+enum CourseType {
+  CORE
+  ELECTIVE
+  GST
+}
+
+enum CourseStatus {
+  ACTIVE
+  INACTIVE
+  DISCONTINUED
+}
+
+model CoursePrerequisite {
+  id              String @id @default(cuid())
+  courseId        String
+  prerequisiteId  String
+
+  course          Course @relation("Course", fields: [courseId], references: [id], onDelete: Cascade)
+  prerequisite    Course @relation("Prerequisite", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, prerequisiteId])
+}
+
+model CourseOffering {
+  id          String   @id @default(cuid())
+  courseId     String
+  sessionId    String
+  semesterId   String
+  timetable    String? // JSON string of timetable
+  enrolledCount Int    @default(0)
+
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  session      AcademicSession @relation(fields: [sessionId], references: [id])
+  semester     Semester        @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  registrations RegistrationDetail[]
+
+  @@unique([courseId, sessionId, semesterId])
+}
+
+// ===================== STUDENTS =====================
+
+model Student {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  matricNumber    String   @unique
+  collegeId       String
+  departmentId    String
+  programmeId     String
+  level           AcademicLevel
+  currentSessionId String?
+  currentSemesterId String?
+  admissionYear   Int
+  gender          String?
+  dateOfBirth     DateTime?
+  maritalStatus   String?
+  stateOfOrigin   String?
+  lga             String?
+  address         String?
+  emergencyContact String?
+  emergencyPhone  String?
+  parentName      String?
+  parentPhone     String?
+  employmentInfo  String?
+  passportUrl     String?
+  cgpa            Float    @default(0.0)
+  totalCreditUnits Int    @default(0)
+  totalQualityPoints Float @default(0.0)
+  registrationStatus RegistrationStatus @default(NOT_STARTED)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  college         College  @relation(fields: [collegeId], references: [id])
+  department      Department @relation(fields: [departmentId], references: [id])
+  programme       Programme @relation(fields: [programmeId], references: [id])
+  currentSession  AcademicSession? @relation(fields: [currentSessionId], references: [id])
+  currentSemester Semester? @relation(fields: [currentSemesterId], references: [id])
+
+  registrations   Registration[]
+  payments        Payment[]
+  results         Result[]
+  adviser         StudentAdviser?
+
+  @@index([collegeId, departmentId, level])
+}
+
+enum RegistrationStatus {
+  NOT_STARTED
+  DRAFT
+  PENDING_ADVISER
+  PENDING_COORDINATOR
+  PENDING_COLLEGE
+  PENDING_REGISTRY
+  APPROVED
+  REJECTED
+  MODIFICATION_REQUESTED
+}
+
+// ===================== REGISTRATIONS =====================
+
+model Registration {
+  id            String   @id @default(cuid())
+  studentId     String
+  sessionId     String
+  semesterId    String
+  status        RegistrationStatus @default(DRAFT)
+  totalUnits    Int      @default(0)
+  coreUnits     Int      @default(0)
+  electiveUnits Int      @default(0)
+  gstUnits      Int      @default(0)
+  carryOverUnits Int     @default(0)
+  submittedAt   DateTime?
+  lockedAt      DateTime?
+  rejectionReason String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  session       AcademicSession @relation(fields: [sessionId], references: [id])
+  semester      Semester @relation(fields: [semesterId], references: [id])
+  details       RegistrationDetail[]
+  approvals     Approval[]
+
+  @@unique([studentId, sessionId, semesterId])
+  @@index([studentId, status])
+}
+
+model RegistrationDetail {
+  id              String   @id @default(cuid())
+  registrationId  String
+  courseId        String
+  courseOfferingId String?
+  isCarryOver     Boolean  @default(false)
+  isRetake        Boolean  @default(false)
+  status          DetailStatus @default(REGISTERED)
+  createdAt       DateTime @default(now())
+
+  registration    Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  course          Course @relation(fields: [courseId], references: [id])
+  courseOffering  CourseOffering? @relation(fields: [courseOfferingId], references: [id])
+
+  @@unique([registrationId, courseId])
+}
+
+enum DetailStatus {
+  REGISTERED
+  DROPPED
+  REPLACED
+  COMPLETED
+  FAILED
+}
+
+// ===================== APPROVAL WORKFLOW =====================
+
+model Approval {
+  id            String   @id @default(cuid())
+  registrationId String
+  approverId    String
+  approverRole  UserRole
+  stage         ApprovalStage
+  decision      ApprovalDecision
+  comment       String?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  registration  Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  approver      User @relation(fields: [approverId], references: [id])
+
+  @@index([registrationId, stage])
+}
+
+enum ApprovalStage {
+  ADVISER
+  COORDINATOR
+  COLLEGE_OFFICER
+  REGISTRY
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+  MODIFICATION_REQUESTED
+  PENDING
+}
+
+// ===================== PAYMENTS =====================
+
+model Payment {
+  id            String   @id @default(cuid())
+  studentId     String
+  sessionId     String
+  feeType       FeeType
+  amount        Float
+  status        PaymentStatus @default(PENDING)
+  reference     String   @unique
+  receiptNo     String?
+  paymentDate   DateTime?
+  paymentMethod String?
+  verifiedById  String?
+  verifiedAt    DateTime?
+  description   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student       Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  history       PaymentHistory[]
+
+  @@index([studentId, status])
+}
+
+enum FeeType {
+  SCHOOL_FEES
+  DEPARTMENTAL_FEES
+  ACCEPTANCE_FEES
+  TECHNOLOGY_FEES
+  ICT_FEES
+  LABORATORY_FEES
+  LIBRARY_FEES
+}
+
+enum PaymentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  CANCELLED
+}
+
+model PaymentHistory {
+  id          String   @id @default(cuid())
+  paymentId   String
+  action      String
+  performedById String?
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  payment     Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+// ===================== RESULTS & CGPA =====================
+
+model Result {
+  id          String   @id @default(cuid())
+  studentId   String
+  courseId    String
+  sessionId   String
+  semesterId  String
+  caScore     Float?
+  examScore   Float?
+  totalScore  Float?
+  grade       String?
+  gradePoint  Float?
+  creditUnits Int
+  status      ResultStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course      Course   @relation(fields: [courseId], references: [id])
+
+  @@unique([studentId, courseId, sessionId])
+}
+
+enum ResultStatus {
+  PENDING
+  PUBLISHED
+  WITHHELD
+}
+
+// ===================== STAFF ASSIGNMENTS =====================
+
+model CollegeOfficer {
+  id          String   @id @default(cuid())
+  userId      String
+  collegeId   String
+  createdAt   DateTime @default(now())
+
+  college     College  @relation(fields: [collegeId], references: [id])
+  @@unique([userId, collegeId])
+}
+
+model DepartmentCoordinator {
+  id            String   @id @default(cuid())
+  userId        String
+  departmentId  String
+  createdAt     DateTime @default(now())
+
+  department    Department @relation(fields: [departmentId], references: [id])
+  @@unique([userId, departmentId])
+}
+
+model AcademicAdviser {
+  id            String   @id @default(cuid())
+  userId        String
+  departmentId  String
+  level         AcademicLevel?
+  createdAt     DateTime @default(now())
+
+  department    Department @relation(fields: [departmentId], references: [id])
+  students      StudentAdviser[]
+
+  @@unique([userId, departmentId])
+}
+
+model StudentAdviser {
+  id          String   @id @default(cuid())
+  studentId   String   @unique
+  adviserId   String
+
+  adviser     AcademicAdviser @relation(fields: [adviserId], references: [id], onDelete: Cascade)
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model AdviserNote {
+  id          String   @id @default(cuid())
+  adviserId   String
+  studentId   String?
+  note        String
+  isPrivate   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  adviser     User     @relation(fields: [adviserId], references: [id])
+}
+
+// ===================== NOTIFICATIONS =====================
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String?
+  audience    NotificationAudience @default(STUDENT)
+  title       String
+  message     String
+  type        NotificationType
+  isRead      Boolean  @default(false)
+  metadata    String? // JSON
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+enum NotificationAudience {
+  ALL
+  STUDENT
+  STAFF
+  ADMIN
+  COLLEGE_OFFICER
+  DEPARTMENT_COORDINATOR
+}
+
+enum NotificationType {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  APPROVAL_UPDATE
+  PAYMENT_CONFIRMATION
+  DEADLINE_REMINDER
+  ANNOUNCEMENT
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  content     String
+  audience    NotificationAudience @default(ALL)
+  authorId    String
+  priority    AnnouncementPriority @default(NORMAL)
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author      User     @relation(fields: [authorId], references: [id])
+}
+
+enum AnnouncementPriority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+}
+
+// ===================== AUDIT LOG =====================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  category    AuditCategory
+  description String
+  entityType  String?
+  entityId    String?
+  ipAddress   String?
+  deviceInfo  String?
+  metadata    String? // JSON
+  createdAt   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([category, createdAt])
+}
+
+enum AuditCategory {
+  AUTH
+  REGISTRATION
+  APPROVAL
+  PAYMENT
+  PROFILE
+  ADMIN_ACTION
+  COURSE_MANAGEMENT
+}
+
+// ===================== SUPPORT TICKETS =====================
+
+model SupportTicket {
+  id          String   @id @default(cuid())
+  ticketNo    String   @unique
+  requesterId String
+  responderId String?
+  subject     String
+  description String
+  category    String
+  priority    AnnouncementPriority @default(NORMAL)
+  status      TicketStatus @default(OPEN)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requester   User     @relation("TicketRequester", fields: [requesterId], references: [id])
+  responder   User?    @relation("TicketResponder", fields: [responderId], references: [id])
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// ===================== SETTINGS =====================
+
+model Setting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  category    String
+  updatedAt   DateTime @updatedAt
+}
