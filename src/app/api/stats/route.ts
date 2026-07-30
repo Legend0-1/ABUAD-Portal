@@ -174,6 +174,7 @@ export async function GET(req: NextRequest) {
       by: ['departmentId'],
       _count: true,
       where: collegeFilter,
+      orderBy: { _count: { departmentId: 'desc' } },
       take: 10,
     });
 
