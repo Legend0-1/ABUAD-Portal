@@ -1,8 +1,8 @@
-'use client'
+'use client';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
-export async function apiFetch(url: string, options: RequestInit = {}) {
+async function rawFetch(url: string, options: RequestInit) {
   const res = await fetch(`${API_BASE}${url}`, {
     ...options,
     headers: {
@@ -10,13 +10,34 @@ export async function apiFetch(url: string, options: RequestInit = {}) {
       ...(options.headers || {}),
     },
     credentials: 'include',
-  })
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
+}
 
-  const data = await res.json().catch(() => ({}))
+export async function apiFetch(url: string, options: RequestInit = {}) {
+  let { res, data } = await rawFetch(url, options);
 
-  if (!res.ok) {
-    throw new Error(data.error || `Request failed with status ${res.status}`)
+  // Access token cookie is short-lived (15 min). If it's expired, try a silent
+  // refresh using the longer-lived refresh token, then retry the request once.
+  if (
+    res.status === 401 &&
+    url !== '/api/auth/refresh' &&
+    url !== '/api/auth/login'
+  ) {
+    const refreshRes = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    }).catch(() => null);
+
+    if (refreshRes && refreshRes.ok) {
+      ({ res, data } = await rawFetch(url, options));
+    }
   }
 
-  return data
+  if (!res.ok) {
+    throw new Error(data.error || `Request failed with status ${res.status}`);
+  }
+
+  return data;
 }
