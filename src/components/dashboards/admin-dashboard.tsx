@@ -26,18 +26,33 @@ export function AdminDashboard({ setActiveView, scope = 'super_admin' }: { setAc
   const { user } = useAuthStore()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { loadStats() }, [scope])
 
   async function loadStats() {
+    setLoading(true)
+    setError(null)
     try {
       const res = await apiFetch(`/api/stats?scope=${scope}`)
       setData(res)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load stats', err)
+      setError(err?.message || 'Failed to load dashboard data')
     } finally {
       setLoading(false)
     }
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+        <AlertCircle className="h-10 w-10 text-destructive" />
+        <p className="font-medium">Couldn't load the dashboard</p>
+        <p className="text-sm text-muted-foreground max-w-md">{error}</p>
+        <Button variant="outline" size="sm" onClick={loadStats}>Try again</Button>
+      </div>
+    )
   }
 
   if (loading || !data) {
