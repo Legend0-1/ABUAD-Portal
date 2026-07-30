@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { GraduationCap, Mail, Lock, Eye, EyeOff, LogIn, Loader2, ShieldCheck, Sparkles, BookOpen, Users, Award, ArrowRight, CheckCircle2, Building2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { GraduationCap, Mail, Lock, Eye, EyeOff, LogIn, Loader2, ShieldCheck, Sparkles, BookOpen, Users, Award, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,31 +14,13 @@ import { toast } from 'sonner'
 import { ABUAD_INFO } from '@/lib/constants'
 import { ThemeToggle } from '@/components/theme-toggle'
 
-const DEMO_ACCOUNTS = [
-  { role: 'Super Admin', email: 'superadmin@abuad.edu.ng', password: 'Admin@123', desc: 'Full system access' },
-  { role: 'Student', email: 'adewale.adeyemi1@abuad.edu.ng', password: 'Student@123', desc: 'Course registration' },
-  { role: 'Bursary', email: 'bursary@abuad.edu.ng', password: 'Admin@123', desc: 'Payment verification' },
-  { role: 'Registry', email: 'registry@abuad.edu.ng', password: 'Admin@123', desc: 'Final approvals' },
-  { role: 'Coordinator', email: 'coordinator.csc@abuad.edu.ng', password: 'Admin@123', desc: 'Dept approvals' },
-  { role: 'Adviser', email: 'adviser.csc@abuad.edu.ng', password: 'Admin@123', desc: 'Course advising' },
-  { role: 'College Officer', email: 'officer.cos@abuad.edu.ng', password: 'Admin@123', desc: 'College approvals' },
-  { role: 'ICT Admin', email: 'ict.admin@abuad.edu.ng', password: 'Admin@123', desc: 'System admin' },
-]
-
 export function LoginScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(true)
   const [loading, setLoading] = useState(false)
-  const [showDemoAccounts, setShowDemoAccounts] = useState(false)
   const setUser = useAuthStore((s) => s.setUser)
-
-  // Auto-load first demo account
-  useEffect(() => {
-    setEmail('superadmin@abuad.edu.ng')
-    setPassword('Admin@123')
-  }, [])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -59,12 +41,6 @@ export function LoginScreen() {
     } finally {
       setLoading(false)
     }
-  }
-
-  function fillDemo(account: typeof DEMO_ACCOUNTS[0]) {
-    setEmail(account.email)
-    setPassword(account.password)
-    toast.info(`Loaded ${account.role} credentials`)
   }
 
   return (
@@ -229,46 +205,6 @@ export function LoginScreen() {
                   )}
                 </Button>
               </form>
-
-              <div className="mt-4 pt-4 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowDemoAccounts(!showDemoAccounts)}
-                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
-                >
-                  {showDemoAccounts ? 'Hide' : 'Show'} demo accounts
-                  <ArrowRight className={`h-3 w-3 transition-transform ${showDemoAccounts ? 'rotate-90' : ''}`} />
-                </button>
-
-                <AnimatePresence>
-                  {showDemoAccounts && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      className="overflow-hidden mt-3"
-                    >
-                      <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
-                        {DEMO_ACCOUNTS.map((acc) => (
-                          <button
-                            key={acc.email}
-                            type="button"
-                            onClick={() => fillDemo(acc)}
-                            className="text-left p-2.5 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/30 transition-all"
-                          >
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                              <span className="text-xs font-semibold">{acc.role}</span>
-                            </div>
-                            <p className="text-[10px] text-muted-foreground truncate">{acc.email}</p>
-                            <p className="text-[10px] text-muted-foreground">{acc.desc}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
             </CardContent>
           </Card>
 
